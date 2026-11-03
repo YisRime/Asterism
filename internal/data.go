@@ -74,7 +74,6 @@ type Score struct {
 	Window   string
 	Vote     int
 	Age      int
-	Risk     []string
 }
 
 // 软件结构
@@ -94,19 +93,22 @@ type Software struct {
 
 // 列表条目
 type SoftwareRow struct {
-	Key      string   `json:"key"`
-	Name     string   `json:"name"`
-	Version  string   `json:"version,omitempty"`
-	Summary  string   `json:"summary"`
-	License  string   `json:"license,omitempty"`
-	Star     *int     `json:"star"`
-	Score    float64  `json:"score"`
-	Breadth  int      `json:"breadth"`
-	Download int64    `json:"download"`
-	Vote     int      `json:"vote"`
-	Age      *int     `json:"age"`
-	Trend    *float64 `json:"trend,omitempty"`
-	Platform []string `json:"platform"`
+	Key        string            `json:"key"`
+	Name       string            `json:"name"`
+	Version    string            `json:"version,omitempty"`
+	Summary    string            `json:"summary"`
+	License    string            `json:"license,omitempty"`
+	Homepage   string            `json:"homepage,omitempty"`
+	Repository string            `json:"repository,omitempty"`
+	Link       map[string]string `json:"link,omitempty"`
+	Star       *int              `json:"star"`
+	Score      float64           `json:"score"`
+	Breadth    int               `json:"breadth"`
+	Download   int64             `json:"download"`
+	Vote       int               `json:"vote"`
+	Age        *int              `json:"age"`
+	Trend      *float64          `json:"trend,omitempty"`
+	Platform   []string          `json:"platform"`
 }
 
 // 基线数值
@@ -165,7 +167,6 @@ CREATE TABLE IF NOT EXISTS software (
 	trend    REAL,
 	delta    INTEGER,
 	platform TEXT NOT NULL DEFAULT '[]',
-	risk     TEXT NOT NULL DEFAULT '[]',
 	main     INTEGER NOT NULL DEFAULT 0,
 	first    TEXT NOT NULL DEFAULT ''
 ) STRICT;
@@ -232,15 +233,16 @@ CREATE TABLE IF NOT EXISTS history (
 	PRIMARY KEY(day, software)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS history_software ON history(software, day);
-CREATE VIEW IF NOT EXISTS software_view AS
+DROP VIEW IF EXISTS software_view;
+CREATE VIEW software_view AS
 SELECT s.id, s.key, p.name, p.version,
 	COALESCE(NULLIF(p.summary, ''), substr(p.description, 1, 200)) AS summary,
 	p.description,
 	COALESCE(json_extract(p.link, '$.homepage'), '') AS homepage,
-	p.repository, p.license, p.author,
+	p.link AS links, p.repository, p.license, p.author,
 	COALESCE(r.star, -1) AS star,
 	s.score, s.breadth, s.download, s.window, s.vote, s.age,
-	s.trend, s.delta, s.platform, s.risk, s.main, s.first
+	s.trend, s.delta, s.platform, s.main, s.first
 FROM software s
 JOIN package p ON p.id = s.main
 LEFT JOIN repository r ON r.name = p.repository;`)
@@ -486,13 +488,13 @@ func SaveSoftware(list []*Software, baseline map[string]Baseline) error {
 	}
 
 	stamp := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-	return writeBatch(func(tx *sql.Tx) error {
+	err = writeBatch(func(tx *sql.Tx) error {
 		if _, err := tx.Exec("DELETE FROM software"); err != nil {
 			return err
 		}
 		stmt, err := tx.Prepare(`INSERT INTO software
 			(id, key, score, breadth, download, window, vote, age, trend, delta,
-			 platform, risk, main, first) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+			 platform, main, first) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 		if err != nil {
 			return err
 		}
@@ -522,7 +524,7 @@ func SaveSoftware(list []*Software, baseline map[string]Baseline) error {
 			}
 			if _, err := stmt.Exec(item.ID, item.Key, item.Score.Niche, item.Score.Breadth,
 				item.Score.Download, item.Score.Window, item.Score.Vote, item.Score.Age,
-				trend, delta, textJSON(item.Platform, "[]"), textJSON(item.Score.Risk, "[]"),
+				trend, delta, textJSON(item.Platform, "[]"),
 				item.Main.ID, first); err != nil {
 				return err
 			}
@@ -540,17 +542,24 @@ func SaveSoftware(list []*Software, baseline map[string]Baseline) error {
 		_, err = tx.Exec("DROP TABLE link")
 		return err
 	})
+	if err != nil {
+		return err
+	}
+	totalCache.Range(func(key, _ any) bool {
+		totalCache.Delete(key)
+		return true
+	})
+	return nil
 }
 
-// 查询列表
-func QuerySoftware(queryText, platforms, sort string, min, offset, limit int) ([]SoftwareRow, int, error) {
+// 列表条件
+func listWhere(queryText, platforms string) (string, []any) {
 	where, arguments := []string{"1=1"}, []any{}
 	if queryText != "" {
 		like := "%" + strings.ToLower(queryText) + "%"
 		where = append(where, "(lower(name) LIKE ? OR lower(summary) LIKE ? OR "+
-			"lower(description) LIKE ? OR lower(license) LIKE ? OR lower(author) LIKE ? OR "+
-			"lower(repository) LIKE ?)")
-		for range 6 {
+			"lower(license) LIKE ? OR lower(author) LIKE ? OR lower(repository) LIKE ?)")
+		for range 5 {
 			arguments = append(arguments, like)
 		}
 	}
@@ -562,11 +571,32 @@ func QuerySoftware(queryText, platforms, sort string, min, offset, limit int) ([
 			}
 		}
 	}
-	if min > 1 {
-		where = append(where, "breadth >= ?")
-		arguments = append(arguments, min)
+	return strings.Join(where, " AND "), arguments
+}
+
+// 计数缓存
+var totalCache sync.Map
+
+// 统计列表
+func QueryTotal(queryText, platforms string) (int, error) {
+	queryText, platforms = strings.TrimSpace(queryText), strings.TrimSpace(platforms)
+	key := queryText + "\x1f" + platforms
+	if value, ok := totalCache.Load(key); ok {
+		return value.(int), nil
 	}
-	condition := strings.Join(where, " AND ")
+	condition, arguments := listWhere(queryText, platforms)
+	var total int
+	if err := db.QueryRow("SELECT COUNT(*) FROM software_view WHERE "+condition,
+		arguments...).Scan(&total); err != nil {
+		return 0, err
+	}
+	totalCache.Store(key, total)
+	return total, nil
+}
+
+// 查询列表
+func QueryList(queryText, platforms, sort string, offset, limit int) ([]SoftwareRow, error) {
+	condition, arguments := listWhere(strings.TrimSpace(queryText), platforms)
 	order, ok := map[string]string{
 		"score": "score DESC", "trend": "trend DESC", "star": "star DESC",
 		"download": "download DESC", "vote": "vote DESC",
@@ -577,17 +607,12 @@ func QuerySoftware(queryText, platforms, sort string, min, offset, limit int) ([
 		order = "score DESC"
 	}
 
-	var total int
-	if err := db.QueryRow("SELECT COUNT(*) FROM software_view WHERE "+condition,
-		arguments...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
 	iterator, err := db.Query(`SELECT key, name, version, summary, license, star,
-		score, breadth, download, vote, age, trend, platform
+		score, breadth, download, vote, age, trend, platform, homepage, repository, links
 		FROM software_view WHERE `+condition+" ORDER BY "+order+" LIMIT ? OFFSET ?",
 		append(arguments, limit, offset)...)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	defer iterator.Close()
 
@@ -595,13 +620,14 @@ func QuerySoftware(queryText, platforms, sort string, min, offset, limit int) ([
 	for iterator.Next() {
 		var row SoftwareRow
 		var star, age, trend any
-		var platform string
+		var platform, links string
 		if err := iterator.Scan(&row.Key, &row.Name, &row.Version, &row.Summary,
 			&row.License, &star, &row.Score, &row.Breadth, &row.Download, &row.Vote,
-			&age, &trend, &platform); err != nil {
-			return nil, 0, err
+			&age, &trend, &platform, &row.Homepage, &row.Repository, &links); err != nil {
+			return nil, err
 		}
 		row.Platform = decodeJSON[[]string](platform)
+		row.Link = decodeJSON[map[string]string](links)
 		if value, ok := star.(int64); ok && value > -1 {
 			number := int(value)
 			row.Star = &number
@@ -615,11 +641,11 @@ func QuerySoftware(queryText, platforms, sort string, min, offset, limit int) ([
 		}
 		items = append(items, row)
 	}
-	return items, total, iterator.Err()
+	return items, iterator.Err()
 }
 
-// 查询单个
-func GetSoftware(key string, sources []Source) (map[string]any, error) {
+// 查询详情
+func GetInfo(key string, sources []Source) (map[string]any, error) {
 	var item struct {
 		ID                                int64
 		Key, Name, Version, Summary       string
@@ -632,17 +658,17 @@ func GetSoftware(key string, sources []Source) (map[string]any, error) {
 		Window                            string
 		Vote                              int
 		Age, Trend, Delta                 any
-		Platform, Risk                    string
+		Platform                          string
 		Main                              int64
 		First                             string
 	}
 	row := db.QueryRow(`SELECT id, key, name, version, summary, description, homepage,
 		repository, license, author, star, score, breadth, download, window, vote,
-		age, trend, delta, platform, risk, main, first FROM software_view WHERE key=?`, key)
+		age, trend, delta, platform, main, first FROM software_view WHERE key=?`, key)
 	if err := row.Scan(&item.ID, &item.Key, &item.Name, &item.Version, &item.Summary,
 		&item.Description, &item.Homepage, &item.Repository, &item.License, &item.Author,
 		&item.Star, &item.Score, &item.Breadth, &item.Download, &item.Window, &item.Vote,
-		&item.Age, &item.Trend, &item.Delta, &item.Platform, &item.Risk, &item.Main,
+		&item.Age, &item.Trend, &item.Delta, &item.Platform, &item.Main,
 		&item.First); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -652,12 +678,9 @@ func GetSoftware(key string, sources []Source) (map[string]any, error) {
 
 	labels := map[string][]string{}
 	labelSet := map[string]map[string]bool{}
-	maintainers, depends, collected := []string{}, []string{}, []string{}
-	maintainerSet, dependSet, sourceSet := map[string]bool{}, map[string]bool{}, map[string]bool{}
-	links := map[string]string{}
-	popularity := 0.0
+	maintainers := []string{}
+	maintainerSet := map[string]bool{}
 	best := map[string]string{}
-	packages := []map[string]any{}
 
 	add := func(set map[string]bool, into *[]string, values []string) {
 		for _, value := range values {
@@ -682,53 +705,27 @@ func GetSoftware(key string, sources []Source) (map[string]any, error) {
 		}
 	}
 
-	iterator, err := db.Query(`SELECT source, origin, version, license, download,
-		window, vote, popularity, size, unit, maintainer, depend, link, hash, label
+	iterator, err := db.Query(`SELECT source, origin, maintainer, label
 		FROM package WHERE software=? ORDER BY source, origin`, item.ID)
 	if err != nil {
 		return nil, err
 	}
 	for iterator.Next() {
-		var source, origin, version, license, window, unit string
-		var download int64
-		var vote int
-		var popularityValue float64
-		var size int64
-		var maintainer, depend, link, hash, label string
-		if err := iterator.Scan(&source, &origin, &version, &license, &download,
-			&window, &vote, &popularityValue, &size, &unit, &maintainer, &depend,
-			&link, &hash, &label); err != nil {
+		var source, origin string
+		var maintainer, label string
+		if err := iterator.Scan(&source, &origin,
+			&maintainer, &label); err != nil {
 			iterator.Close()
 			return nil, err
 		}
-		popularity = max(popularity, popularityValue)
 		add(maintainerSet, &maintainers, decodeJSON[[]string](maintainer))
-		add(dependSet, &depends, decodeJSON[[]string](depend))
 		group := decodeJSON[map[string][]string](label)
 		for kind, values := range group {
 			addGroup(kind, values)
 		}
-		if !sourceSet[source] {
-			sourceSet[source] = true
-			collected = append(collected, source)
-		}
-		for kind, value := range decodeJSON[map[string]string](link) {
-			if value != "" && kind != "homepage" {
-				if _, exists := links[kind]; !exists {
-					links[kind] = value
-				}
-			}
-		}
 		if current, exists := best[source]; !exists || len(origin) < len(current) {
 			best[source] = origin
 		}
-		packages = append(packages, map[string]any{
-			"source": source, "id": origin, "version": version, "license": license,
-			"download": download, "window": window, "vote": vote,
-			"popularity": popularityValue, "size": size, "unit": unit,
-			"maintainer": decodeJSON[[]string](maintainer), "link": decodeJSON[map[string]string](link),
-			"hash": decodeJSON[map[string]string](hash),
-		})
 	}
 	if err := iterator.Err(); err != nil {
 		iterator.Close()
@@ -775,18 +772,52 @@ func GetSoftware(key string, sources []Source) (map[string]any, error) {
 	}
 	eventIterator.Close()
 
+	var depend, change, window string
+	var size int64
+	extraIterator, err := db.Query(`SELECT depend, change, size, window FROM package WHERE software=? ORDER BY source`, item.ID)
+	if err != nil {
+		return nil, err
+	}
+	for extraIterator.Next() {
+		var dependText, changeText, windowText string
+		var sizeValue int64
+		if err := extraIterator.Scan(&dependText, &changeText, &sizeValue, &windowText); err != nil {
+			extraIterator.Close()
+			return nil, err
+		}
+		if depend == "" && len(dependText) > 2 {
+			depend = dependText
+		}
+		if change == "" {
+			change = changeText
+		}
+		if sizeValue > size {
+			size = sizeValue
+		}
+		if window == "" {
+			window = windowText
+		}
+	}
+	if err := extraIterator.Err(); err != nil {
+		extraIterator.Close()
+		return nil, err
+	}
+	extraIterator.Close()
+	if depend == "" {
+		depend = "[]"
+	}
+
 	return map[string]any{
 		"key": item.Key, "name": item.Name, "version": item.Version,
 		"summary": item.Summary, "description": item.Description,
 		"homepage": item.Homepage, "repository": item.Repository,
 		"license": item.License, "author": item.Author,
-		"star": nullable(item.Star), "popularity": popularity,
-		"score": item.Score, "breadth": item.Breadth, "download": item.Download,
-		"window": item.Window, "vote": item.Vote, "age": nullable(item.Age),
-		"trend": nullable(item.Trend), "delta": nullable(item.Delta),
-		"platform": decodeJSON[[]string](item.Platform), "risk": decodeJSON[[]string](item.Risk),
-		"label": labels, "maintainer": maintainers, "depend": depends,
-		"link": links, "source": collected, "package": packages,
+		"star": nullable(item.Star),
+		"change": change, "size": size,
+		"window": window,
+		"platform": decodeJSON[[]string](item.Platform),
+		"label":    labels, "maintainer": maintainers,
+		"depend":   decodeJSON[[]string](depend),
 		"install": installs, "event": events,
 	}, nil
 }

@@ -88,13 +88,16 @@ func Serve(port int, sources []Source) error {
 		install := make([]map[string]string, 0, len(sources))
 		for _, item := range sources {
 			if item.Command != "" || item.InstallURL != "" {
-				install = append(install, map[string]string{"source": item.Name, "label": item.Label})
+				install = append(install, map[string]string{
+					"source": item.Name, "label": item.Label,
+					"command": item.Command, "url": item.InstallURL,
+				})
 			}
 		}
 		stats["install"] = install
 		respond(writer, stats)
 	})
-	mux.HandleFunc("/api/entities", func(writer http.ResponseWriter, request *http.Request) {
+	mux.HandleFunc("/api/list", func(writer http.ResponseWriter, request *http.Request) {
 		query := request.URL.Query()
 		limit, _ := strconv.Atoi(query.Get("limit"))
 		if limit <= 0 || limit > 500 {
@@ -104,26 +107,31 @@ func Serve(port int, sources []Source) error {
 		if offset < 0 {
 			offset = 0
 		}
-		minimum, _ := strconv.Atoi(query.Get("min"))
-		if minimum < 1 {
-			minimum = 1
-		}
-		items, total, err := QuerySoftware(
+		items, err := QueryList(
 			strings.TrimSpace(query.Get("q")),
-			query.Get("platforms"), query.Get("sort"), minimum, offset, limit)
+			query.Get("platforms"), query.Get("sort"), offset, limit)
 		if err != nil {
 			http.Error(writer, "查询失败："+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		respond(writer, map[string]any{"total": total, "items": items})
+		respond(writer, map[string]any{"items": items})
 	})
-	mux.HandleFunc("/api/entity", func(writer http.ResponseWriter, request *http.Request) {
+	mux.HandleFunc("/api/count", func(writer http.ResponseWriter, request *http.Request) {
+		query := request.URL.Query()
+		total, err := QueryTotal(query.Get("q"), query.Get("platforms"))
+		if err != nil {
+			http.Error(writer, "查询失败："+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		respond(writer, map[string]any{"total": total})
+	})
+	mux.HandleFunc("/api/info", func(writer http.ResponseWriter, request *http.Request) {
 		key := request.URL.Query().Get("key")
 		if key == "" {
 			http.Error(writer, "查询失败：缺少参数", http.StatusBadRequest)
 			return
 		}
-		item, err := GetSoftware(key, sources)
+		item, err := GetInfo(key, sources)
 		if err != nil {
 			http.Error(writer, "查询失败："+err.Error(), http.StatusInternalServerError)
 			return

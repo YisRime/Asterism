@@ -53,6 +53,12 @@ func parseDesc(content []byte, repo string) *asterism.Package {
 	if fields["%URL%"] != "" {
 		link["homepage"] = fields["%URL%"]
 	}
+	var optdepends []string
+	for _, line := range strings.Split(fields["%OPTDEPENDS%"], "\n") {
+		if index := strings.IndexByte(line, ':'); index > 0 {
+			optdepends = append(optdepends, line[:index])
+		}
+	}
 	record := &asterism.Package{
 		Source: "arch", Origin: name, Name: name,
 		Summary: fields["%DESC%"], Repository: asterism.NormalizeRepository(fields["%URL%"]),
@@ -62,7 +68,7 @@ func parseDesc(content []byte, repo string) *asterism.Package {
 			"group": strings.Fields(fields["%GROUPS%"]),
 			"repo":  {repo},
 		},
-		Depend:   append(strings.Fields(fields["%DEPENDS%"]), strings.Fields(fields["%OPTDEPENDS%"])...),
+		Depend:   append(strings.Fields(fields["%DEPENDS%"]), optdepends...),
 		Platform: []string{"Linux"}, Link: link,
 	}
 	if base := fields["%BASE%"]; base != "" && base != name {

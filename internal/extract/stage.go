@@ -25,7 +25,7 @@ func Daemon(config asterism.Config, sources []asterism.Source) {
 		}
 	}
 	scheduler := cron.New(cron.WithLogger(cron.DiscardLogger))
-	if _, err := scheduler.AddFunc("0 3 * * *", job); err != nil {
+	if _, err := scheduler.AddFunc("0 4 * * *", job); err != nil {
 		asterism.Log("调度失败：%v", err)
 		return
 	}

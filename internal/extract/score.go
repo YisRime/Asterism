@@ -1,7 +1,6 @@
 package extract
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -57,25 +56,15 @@ func scoreSoftware(item *asterism.Software, now time.Time) {
 		[]int64{2000, 1000, 400}, []float64{0.75, 0.5, 0.25})
 	overexposed := max(starExposed, downloadExposed, voteExposed)
 
-	flags := []string{}
 	penalty := 0.0
 	if ageDays != -1 && ageDays > 730 {
-		flags = append(flags, fmt.Sprintf("stale_%dy", ageDays/365))
 		penalty = 1.0
 	}
 	if item.License == "" || item.License == "unknown" || item.License == "proprietary" {
-		flags = append(flags, "no_license")
 		penalty = max(penalty, 0.4)
 	}
-	if len(item.Records) == 1 {
-		flags = append(flags, "single_source")
-	}
 	if item.Repository == "" {
-		flags = append(flags, "no_public_repo")
 		penalty = max(penalty, 0.5)
-	}
-	if item.Summary == "" {
-		flags = append(flags, "no_description")
 	}
 
 	niche := 2.0*math.Log1p(float64(breadth)) +
@@ -88,7 +77,7 @@ func scoreSoftware(item *asterism.Software, now time.Time) {
 
 	item.Score = asterism.Score{
 		Niche: asterism.Round(niche, 3), Breadth: breadth, Download: download,
-		Window: window, Vote: vote, Age: ageDays, Risk: flags,
+		Window: window, Vote: vote, Age: ageDays,
 	}
 }
 

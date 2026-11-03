@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Asterism — 开源软件装机索引</title>
+<meta name="description" content="把 17 个软件源交叉合并成一份开源软件装机索引：按跨源覆盖度排序，附各平台安装命令。">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="page">
+
+<aside class="side">
+  <div class="zone">
+    <header class="top">
+      <h1>Asterism</h1>
+      <a class="by" href="https://github.com/YisRime/asterism" target="_blank" rel="noopener">Powered By Yis_Rime</a>
+    </header>
+    <p class="gen" id="gen"></p>
+  </div>
+
+  <div class="zone">
+    <h2>总览</h2>
+    <div class="stats" id="stats">
+      <div><b id="stat-software"></b><span>收录软件</span></div>
+      <div><b id="stat-package"></b><span>源记录</span></div>
+      <div><b id="stat-multi"></b><span>多源收录</span></div>
+      <div><b id="stat-repo"></b><span>公开仓库</span></div>
+      <div><b id="stat-download"></b><span>累计安装</span></div>
+      <div><b id="stat-star"></b><span>星标覆盖</span></div>
+    </div>
+    <ul class="platforms" id="platforms">
+      <li class="macOS">macOS<b></b></li>
+      <li class="Windows">Windows<b></b></li>
+      <li class="Linux">Linux<b></b></li>
+      <li class="Android">Android<b></b></li>
+      <li class="FreeBSD">FreeBSD<b></b></li>
+    </ul>
+  </div>
+
+  <div class="zone zone-install">
+    <h2>安装</h2>
+    <div class="install" id="install">
+      <div class="cmd" data-source="brew_cask">
+        <span>Homebrew cask</span>
+        <code class="mono">brew install --cask {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="brew_formula">
+        <span>Homebrew</span>
+        <code class="mono">brew install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="macports">
+        <span>MacPorts</span>
+        <code class="mono">sudo port install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="chocolatey">
+        <span>Chocolatey</span>
+        <code class="mono">choco install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="winget">
+        <span>winget</span>
+        <code class="mono">winget install --id {id} -e</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="scoop">
+        <span>Scoop</span>
+        <code class="mono">scoop install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="flathub">
+        <span>Flathub</span>
+        <code class="mono">flatpak install flathub {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="snap">
+        <span>Snap</span>
+        <code class="mono">sudo snap install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="aur">
+        <span>AUR</span>
+        <code class="mono">yay -S {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="arch">
+        <span>Arch Linux</span>
+        <code class="mono">sudo pacman -S {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="nix">
+        <span>Nixpkgs</span>
+        <code class="mono">nix profile install nixpkgs#{id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="alpine">
+        <span>Alpine</span>
+        <code class="mono">sudo apk add {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="debian">
+        <span>Debian</span>
+        <code class="mono">sudo apt install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="opensuse">
+        <span>openSUSE</span>
+        <code class="mono">sudo zypper install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="freebsd">
+        <span>FreeBSD</span>
+        <code class="mono">sudo pkg install {id}</code>
+        <button class="ib copy" type="button" title="复制" aria-label="复制" hidden></button>
+      </div>
+      <div class="cmd" data-source="fdroid">
+        <span>F-Droid</span>
+        <code class="mono">https://f-droid.org/packages/{id}/</code>
+        <a class="ib open" title="打开" aria-label="打开" hidden></a>
+      </div>
+      <div class="cmd" data-source="izzy">
+        <span>IzzyOnDroid</span>
+        <code class="mono">https://apt.izzysoft.de/fdroid/index/apk/{id}</code>
+        <a class="ib open" title="打开" aria-label="打开" hidden></a>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="toolbar">
+    <div class="search">
+      <input id="q" type="search" placeholder="搜索…" autocomplete="off" spellcheck="false" aria-label="搜索软件">
+    </div>
+    <div class="pager" hidden>
+      <button id="prev" type="button" aria-label="上一页" disabled>‹</button>
+      <b id="page"></b>
+      <button id="next" type="button" aria-label="下一页" disabled>›</button>
+    </div>
+    <div class="filters">
+      <div class="toggles" role="group" aria-label="平台筛选">
+        <button class="tg" data-p="macOS" aria-pressed="false">macOS</button>
+        <button class="tg" data-p="Windows" aria-pressed="false">Windows</button>
+        <button class="tg" data-p="Linux" aria-pressed="false">Linux</button>
+        <button class="tg" data-p="Android" aria-pressed="false">Android</button>
+        <button class="tg" data-p="FreeBSD" aria-pressed="false">FreeBSD</button>
+      </div>
+      <div class="sorts" role="group" aria-label="排序方式">
+        <button class="st" data-sort="score" aria-pressed="true">综合</button>
+        <button class="st" data-sort="fresh" aria-pressed="false">更新</button>
+        <button class="st" data-sort="download" aria-pressed="false">安装量</button>
+        <button class="st" data-sort="star" aria-pressed="false">星标</button>
+        <button class="st" data-sort="vote" aria-pressed="false">投票</button>
+        <button class="st" data-sort="name" aria-pressed="false">名称</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="list">
+    <div id="ledger"></div>
+    <p id="empty" hidden>暂无数据</p>
+  </div>
+</main>
+
+</div>
+
+<template id="row-template">
+  <div class="row">
+    <div class="head">
+      <span class="name"></span>
+      <span class="sub" hidden></span>
+      <div class="rank">
+        <span class="trend" hidden></span>
+        <span class="score"></span>
+      </div>
+    </div>
+    <p class="desc" hidden><span class="text"></span><b class="dl" hidden></b></p>
+    <p class="meta" hidden></p>
+  </div>
+</template>
+
+<template id="detail-template">
+  <div class="kv" hidden>
+    <div data-metric="star" hidden><span>星标</span><b></b></div>
+    <div data-metric="size" hidden><span>体积</span><b></b></div>
+    <div data-metric="change" hidden><span>变更</span><b></b></div>
+    <div data-metric="window" hidden><span>渠道</span><b></b></div>
+  </div>
+  <p class="desc" hidden></p>
+  <p class="meta" hidden>
+    <span class="auth" hidden>作者 <b></b></span>
+    <span class="maint" hidden>维护 <b></b></span>
+    <span class="depend" hidden>依赖 <b></b></span>
+    <span class="lab" hidden>标签 <b></b></span>
+  </p>
+  <h4 hidden>动态</h4>
+  <ul class="signals" hidden></ul>
+  <p class="hint" hidden>载入失败</p>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
